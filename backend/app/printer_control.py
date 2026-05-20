@@ -101,7 +101,7 @@ class PrinterControl:
                 "command": "project_file",
                 "param": f"Metadata/plate_{plate}.gcode",
                 "subtask_name": subtask_name or remote_name.rsplit(".", 1)[0],
-                "url": f"file:///{remote_name}",
+                "url": f"ftp://{remote_name}",
                 "bed_type": "auto",
                 "bed_leveling": bed_leveling,
                 "flow_cali": flow_cali,
@@ -109,6 +109,11 @@ class PrinterControl:
                 "layer_inspect": layer_inspect,
                 "timelapse": timelapse,
                 "use_ams": use_ams,
+                "ams_mapping": [],
+                "profile_id": "0",
+                "project_id": "0",
+                "subtask_id": "0",
+                "task_id": "0",
             }
         }
         info = self._client.publish(self._topic, json.dumps(payload), qos=0)

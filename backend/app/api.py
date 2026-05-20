@@ -9,8 +9,11 @@ from collections import deque
 from dataclasses import asdict
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
+
 import uvicorn
-from fastapi import FastAPI, File, Form, Response, UploadFile
+from fastapi import FastAPI, Request, Response
+from starlette.datastructures import UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
@@ -22,6 +25,13 @@ from .printer_control import VALID_ACTIONS, PrinterControl
 log = logging.getLogger(__name__)
 
 _EVENT_BUFFER_SIZE = 200
+_MAX_UPLOAD_BYTES = 200 * 1024 * 1024  # 200 MB cap on 3MF parts
+
+
+def _form_bool(val: Any, default: bool) -> bool:
+    if val is None:
+        return default
+    return str(val).strip().lower() in ("1", "true", "yes", "on")
 
 
 def _safe_remote_name(name: str) -> str:
@@ -171,53 +181,60 @@ def build_app(state: AppState) -> FastAPI:
             headers["X-Frame-Timestamp"] = f"{ts:.3f}"
         return Response(content=jpeg, media_type="image/jpeg", headers=headers)
 
-    @app.post("/api/print/{action}")
-    def print_control(action: str) -> Response:
-        if action not in VALID_ACTIONS:
-            return JSONResponse({"ok": False, "error": "bad_action"}, status_code=400)
-        ctrl = state.control()
-        if ctrl is None or not ctrl.is_connected():
-            return JSONResponse({"ok": False, "error": "mqtt_disconnected"}, status_code=503)
-        snap = state.snapshot()
-        gcode = str(snap.get("gcode_state") or "").upper()
-        allowed = {"pause": {"RUNNING"}, "resume": {"PAUSE"}, "stop": {"RUNNING", "PAUSE"}}
-        if gcode not in allowed[action]:
-            return JSONResponse(
-                {"ok": False, "error": "bad_state", "gcode_state": gcode},
-                status_code=409,
-            )
-        ok, seq = ctrl.publish_command(action, source="api")
-        return JSONResponse({"ok": ok, "sequence_id": seq}, status_code=200 if ok else 502)
-
     @app.post("/api/print/start")
-    async def print_start(
-        file: UploadFile = File(...),
-        plate: int = Form(1),
-        use_ams: bool = Form(False),
-        bed_leveling: bool = Form(True),
-        flow_cali: bool = Form(False),
-        vibration_cali: bool = Form(True),
-        layer_inspect: bool = Form(False),
-        timelapse: bool = Form(False),
-    ) -> Response:
-        if not file.filename or not file.filename.lower().endswith(".3mf"):
+    async def print_start(request: Request) -> Response:
+        try:
+            form = await request.form(max_part_size=_MAX_UPLOAD_BYTES)
+        except Exception as exc:
+            log.warning("multipart parse failed: %s", exc)
+            return JSONResponse({"ok": False, "error": "bad_form", "detail": str(exc)}, status_code=400)
+
+        upload = form.get("file")
+        if not isinstance(upload, UploadFile):
+            return JSONResponse({"ok": False, "error": "missing_file"}, status_code=400)
+
+        log.info(
+            "print_start filename=%s size=%s content_type=%s",
+            upload.filename, getattr(upload, "size", "?"), upload.content_type,
+        )
+
+        if not upload.filename or not upload.filename.lower().endswith(".3mf"):
+            log.warning("reject: not 3mf filename=%s", upload.filename)
             return JSONResponse({"ok": False, "error": "must_be_3mf"}, status_code=400)
         ctrl = state.control()
         if ctrl is None or not ctrl.is_connected():
+            log.warning("reject: mqtt disconnected")
             return JSONResponse({"ok": False, "error": "mqtt_disconnected"}, status_code=503)
         snap = state.snapshot()
         gcode = str(snap.get("gcode_state") or "").upper()
         if gcode not in {"IDLE", "FINISH", "FAILED", ""}:
+            log.warning("reject: busy gcode_state=%s", gcode)
             return JSONResponse(
                 {"ok": False, "error": "busy", "gcode_state": gcode},
                 status_code=409,
             )
 
-        safe_name = _safe_remote_name(file.filename)
+        try:
+            plate = int(form.get("plate", 1))
+        except (TypeError, ValueError):
+            plate = 1
+        use_ams = _form_bool(form.get("use_ams"), False)
+        bed_leveling = _form_bool(form.get("bed_leveling"), True)
+        flow_cali = _form_bool(form.get("flow_cali"), False)
+        vibration_cali = _form_bool(form.get("vibration_cali"), True)
+        layer_inspect = _form_bool(form.get("layer_inspect"), False)
+        timelapse = _form_bool(form.get("timelapse"), False)
+
+        safe_name = _safe_remote_name(upload.filename)
         subtask = safe_name.rsplit(".", 1)[0]
         try:
-            ok, seq = ctrl.upload_and_start(
-                src=file.file,
+            upload.file.seek(0)
+        except Exception:
+            pass
+        try:
+            ok, seq = await run_in_threadpool(
+                ctrl.upload_and_start,
+                src=upload.file,
                 remote_name=safe_name,
                 subtask_name=subtask,
                 plate=plate,
@@ -231,11 +248,29 @@ def build_app(state: AppState) -> FastAPI:
         except FtpsUploadError as exc:
             return JSONResponse({"ok": False, "error": "ftps_failed", "detail": str(exc)}, status_code=502)
         finally:
-            await file.close()
+            await upload.close()
         return JSONResponse(
             {"ok": ok, "sequence_id": seq, "remote_name": safe_name},
             status_code=200 if ok else 502,
         )
+
+    @app.post("/api/print/{action}")
+    def print_control(action: str) -> Response:
+        if action not in VALID_ACTIONS:
+            return JSONResponse({"ok": False, "error": "bad_action", "action": action}, status_code=400)
+        ctrl = state.control()
+        if ctrl is None or not ctrl.is_connected():
+            return JSONResponse({"ok": False, "error": "mqtt_disconnected"}, status_code=503)
+        snap = state.snapshot()
+        gcode = str(snap.get("gcode_state") or "").upper()
+        allowed = {"pause": {"RUNNING"}, "resume": {"PAUSE"}, "stop": {"RUNNING", "PAUSE"}}
+        if gcode not in allowed[action]:
+            return JSONResponse(
+                {"ok": False, "error": "bad_state", "gcode_state": gcode},
+                status_code=409,
+            )
+        ok, seq = ctrl.publish_command(action, source="api")
+        return JSONResponse({"ok": ok, "sequence_id": seq}, status_code=200 if ok else 502)
 
     @app.get("/api/stream")
     async def stream() -> StreamingResponse:
@@ -262,7 +297,7 @@ class ApiServer:
     """Run uvicorn in a background thread."""
 
     def __init__(self, app: FastAPI, *, host: str = "0.0.0.0", port: int = 8000) -> None:
-        config = uvicorn.Config(app, host=host, port=port, log_level="info", access_log=False)
+        config = uvicorn.Config(app, host=host, port=port, log_level="info", access_log=True)
         self._server = uvicorn.Server(config)
         self._thread = threading.Thread(target=self._server.run, name="api-server", daemon=True)
 

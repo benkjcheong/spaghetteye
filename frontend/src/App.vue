@@ -234,7 +234,13 @@ async function confirmStopYes() {
               :disabled="!selectedFile || !canStart || uploading"
               @click="startUpload"
             >
-              {{ uploading ? `Uploading ${uploadProgress}%` : 'Send & print' }}
+              {{
+                !uploading
+                  ? 'Send & print'
+                  : uploadProgress < 100
+                    ? `Uploading ${uploadProgress}%`
+                    : 'Sending to printer…'
+              }}
             </button>
           </div>
         </div>
