@@ -68,8 +68,10 @@ class AppState:
         self._loop = loop
 
     def update_snapshot(self, snapshot: dict[str, Any]) -> None:
+        snap_copy = dict(snapshot)
         with self._lock:
-            self._snapshot = dict(snapshot)
+            self._snapshot = snap_copy
+        self._broadcast({"type": "snapshot", "ts": time.time(), "data": snap_copy})
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
@@ -79,12 +81,16 @@ class AppState:
         record = {"ts": time.time(), **asdict(event)}
         with self._lock:
             self._events.append(record)
+        self._broadcast({"type": "event", "ts": record["ts"], "data": record})
+
+    def _broadcast(self, msg: dict[str, Any]) -> None:
+        with self._lock:
             subs = list(self._subscribers)
             loop = self._loop
         if loop is None:
             return
         for q in subs:
-            loop.call_soon_threadsafe(self._safe_put, q, record)
+            loop.call_soon_threadsafe(self._safe_put, q, msg)
 
     @staticmethod
     def _safe_put(q: asyncio.Queue[dict[str, Any]], item: dict[str, Any]) -> None:
@@ -127,6 +133,8 @@ class AppState:
                 self._detector["last_confidence"] = result.confidence
                 self._detector["last_summary"] = result.summary
                 self._detector["failure_detected"] = result.failure_detected
+            det_copy = dict(self._detector)
+        self._broadcast({"type": "detector", "ts": time.time(), "data": det_copy})
 
     def detector(self) -> dict[str, Any]:
         with self._lock:
@@ -298,7 +306,12 @@ def build_app(state: AppState) -> FastAPI:
 
         async def gen():
             try:
-                yield f": connected\n\n"
+                yield ": connected\n\n"
+                # Send initial state so client doesn't need to GET snapshot/detector first.
+                init_snap = {"type": "snapshot", "ts": time.time(), "data": state.snapshot()}
+                init_det = {"type": "detector", "ts": time.time(), "data": state.detector()}
+                yield f"data: {json.dumps(init_snap)}\n\n"
+                yield f"data: {json.dumps(init_det)}\n\n"
                 while True:
                     try:
                         item = await asyncio.wait_for(q.get(), timeout=15.0)

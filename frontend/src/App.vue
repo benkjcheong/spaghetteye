@@ -18,46 +18,45 @@ const detector = ref<Detector | null>(null);
 const frameSrc = ref(`/api/frame.jpg?ts=${Date.now()}`);
 const frameError = ref(false);
 
-async function fetchJSON<T>(path: string): Promise<T | null> {
-  try {
-    const r = await fetch(path);
-    if (!r.ok) return null;
-    return (await r.json()) as T;
-  } catch {
-    return null;
-  }
-}
-
-async function tickSnapshot() {
-  const data = await fetchJSON<{ snapshot: Snapshot }>('/api/snapshot');
-  if (data?.snapshot) snapshot.value = data.snapshot;
-}
-
-async function tickDetector() {
-  const data = await fetchJSON<Detector>('/api/detector');
-  if (data) detector.value = data;
-}
+type StreamMessage =
+  | { type: 'snapshot'; ts: number; data: Snapshot }
+  | { type: 'detector'; ts: number; data: Detector }
+  | { type: 'event'; ts: number; data: Record<string, unknown> };
 
 function tickFrame() {
   frameSrc.value = `/api/frame.jpg?ts=${Date.now()}`;
 }
 
-let snapTimer: number | undefined;
-let detTimer: number | undefined;
+// kept as a no-op shim so optimistic toggle code can still call it without effect.
+function tickSnapshot() {}
+
 let frameTimer: number | undefined;
+let es: EventSource | null = null;
+
+function connectStream() {
+  es = new EventSource('/api/stream');
+  es.onmessage = (ev) => {
+    try {
+      const msg = JSON.parse(ev.data) as StreamMessage;
+      if (msg.type === 'snapshot') snapshot.value = msg.data;
+      else if (msg.type === 'detector') detector.value = msg.data;
+    } catch {}
+  };
+  es.onerror = () => {
+    es?.close();
+    es = null;
+    setTimeout(connectStream, 2000);
+  };
+}
 
 onMounted(() => {
-  tickSnapshot();
-  tickDetector();
-  snapTimer = window.setInterval(tickSnapshot, 2000);
-  detTimer = window.setInterval(tickDetector, 3000);
+  connectStream();
   frameTimer = window.setInterval(tickFrame, 5000);
 });
 
 onUnmounted(() => {
-  if (snapTimer) clearInterval(snapTimer);
-  if (detTimer) clearInterval(detTimer);
   if (frameTimer) clearInterval(frameTimer);
+  es?.close();
 });
 
 const state = computed(() => (snapshot.value.gcode_state ?? 'IDLE').toUpperCase());
