@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 type Snapshot = {
   gcode_state?: string;
@@ -162,39 +162,42 @@ function showToast(msg: string, kind: 'ok' | 'err') {
   toastTimer = window.setTimeout(() => (toast.value = null), 3500);
 }
 
-const lightOn = computed(() => {
+const lightOverride = ref<'on' | 'off' | null>(null);
+const lightBusy = ref(false);
+
+const backendLightOn = computed(() => {
   const arr = snapshot.value.lights_report || [];
   const cl = arr.find((l) => l.node === 'chamber_light');
   return (cl?.mode || 'off').toLowerCase() === 'on';
 });
-const lightBusy = ref(false);
 
-function patchLightLocal(mode: 'on' | 'off') {
-  const arr = [...(snapshot.value.lights_report || [])];
-  const idx = arr.findIndex((l) => l.node === 'chamber_light');
-  if (idx >= 0) arr[idx] = { ...arr[idx], mode };
-  else arr.push({ node: 'chamber_light', mode });
-  snapshot.value = { ...snapshot.value, lights_report: arr };
-}
+const lightOn = computed(() =>
+  lightOverride.value !== null ? lightOverride.value === 'on' : backendLightOn.value,
+);
+
+// Clear override once backend snapshot reflects our target.
+watch(backendLightOn, (now) => {
+  if (lightOverride.value !== null && (now ? 'on' : 'off') === lightOverride.value) {
+    lightOverride.value = null;
+  }
+});
 
 async function toggleLight() {
   const target: 'on' | 'off' = lightOn.value ? 'off' : 'on';
-  const prev: 'on' | 'off' = lightOn.value ? 'on' : 'off';
-  patchLightLocal(target);
+  lightOverride.value = target;
   lightBusy.value = true;
   try {
     const r = await fetch(`/api/light/${target}`, { method: 'POST' });
     const body = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string };
     if (!r.ok || !body.ok) {
-      patchLightLocal(prev);
+      lightOverride.value = null;
       showToast(`Light failed: ${body.error ?? r.status}`, 'err');
     }
   } catch (e) {
-    patchLightLocal(prev);
+    lightOverride.value = null;
     showToast(`Light error: ${(e as Error).message}`, 'err');
   } finally {
     lightBusy.value = false;
-    tickSnapshot();
   }
 }
 
