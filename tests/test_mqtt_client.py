@@ -52,6 +52,7 @@ def test_build_client_uses_async_connect(monkeypatch):
     class DummyClient:
         def __init__(self, *args, **kwargs):
             self.on_connect = None
+            self.on_connect_fail = None
             self.on_disconnect = None
             self.on_message = None
 
@@ -81,3 +82,4 @@ def test_build_client_uses_async_connect(monkeypatch):
 
     assert isinstance(client, DummyClient)
     assert connect_async_calls == [(("192.168.1.33", 8883), {"keepalive": 60})]
+    assert callable(client.on_connect_fail)

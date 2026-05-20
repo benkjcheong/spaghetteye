@@ -73,6 +73,9 @@ def build_client(
     def on_disconnect(_c, _userdata, _flags, reason_code, _props=None):
         log.warning("disconnected: %s (auto-reconnect)", reason_code)
 
+    def on_connect_fail(_c, _userdata):
+        log.warning("connect attempt failed; retrying")
+
     def on_message(_c, _userdata, msg: mqtt.MQTTMessage):
         try:
             payload = json.loads(msg.payload.decode("utf-8"))
@@ -85,6 +88,7 @@ def build_client(
             log.exception("handler error")
 
     client.on_connect = on_connect
+    client.on_connect_fail = on_connect_fail
     client.on_disconnect = on_disconnect
     client.on_message = on_message
 
