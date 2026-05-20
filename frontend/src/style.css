@@ -1,23 +1,30 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --color-bg-deep: #ffffff;
+  --color-bg-panel: #ffffff;
+  --color-bg-tile: #f8fafc;
+  --color-line: #e5e7eb;
+  --color-text-primary: #0f172a;
+  --color-text-muted: #64748b;
+  --color-brand: #00ae42;
+  --color-brand-soft: #00ae4214;
+  --color-state-running: #00ae42;
+  --color-state-pause: #d97706;
+  --color-state-finish: #2563eb;
+  --color-state-fail: #dc2626;
+  --color-state-idle: #94a3b8;
+  --color-spaghetti: #c026d3;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: Inter, system-ui, sans-serif;
+}
 
 @layer base {
-  html,
-  body,
-  #app {
-    height: 100%;
-  }
-  body {
-    @apply bg-white text-text-primary font-sans antialiased;
-  }
+  html, body, #app { height: 100%; }
+  body { @apply bg-white text-text-primary font-sans antialiased; }
 }
 
 @layer components {
-  .panel {
-    @apply bg-white rounded-xl ring-1 ring-line p-6 flex flex-col;
-  }
-  .pill {
-    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono ring-1;
-  }
+  .panel { @apply bg-white rounded-xl ring-1 ring-line p-6 flex flex-col; }
+  .pill { @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono ring-1; }
 }
