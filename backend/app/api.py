@@ -20,7 +20,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from .events import Event
 from .failure_detector import DetectionResult
 from .ftps_upload import FtpsUploadError
-from .printer_control import VALID_ACTIONS, PrinterControl
+from .printer_control import VALID_ACTIONS, VALID_LIGHT_MODES, PrinterControl
 
 log = logging.getLogger(__name__)
 
@@ -271,6 +271,26 @@ def build_app(state: AppState) -> FastAPI:
             )
         ok, seq = ctrl.publish_command(action, source="api")
         return JSONResponse({"ok": ok, "sequence_id": seq}, status_code=200 if ok else 502)
+
+    @app.post("/api/light/{action}")
+    def light_control(action: str) -> Response:
+        ctrl = state.control()
+        if ctrl is None or not ctrl.is_connected():
+            return JSONResponse({"ok": False, "error": "mqtt_disconnected"}, status_code=503)
+        if action == "toggle":
+            lights = state.snapshot().get("lights_report") or []
+            current = "off"
+            for item in lights:
+                if isinstance(item, dict) and item.get("node") == "chamber_light":
+                    current = str(item.get("mode") or "off").lower()
+                    break
+            mode = "off" if current == "on" else "on"
+        elif action in VALID_LIGHT_MODES:
+            mode = action
+        else:
+            return JSONResponse({"ok": False, "error": "bad_action"}, status_code=400)
+        ok, seq = ctrl.set_light(mode)
+        return JSONResponse({"ok": ok, "mode": mode, "sequence_id": seq}, status_code=200 if ok else 502)
 
     @app.get("/api/stream")
     async def stream() -> StreamingResponse:

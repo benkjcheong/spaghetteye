@@ -5,6 +5,7 @@ type Snapshot = {
   gcode_state?: string;
   subtask_name?: string;
   mc_remaining_time?: number;
+  lights_report?: { node?: string; mode?: string }[];
 };
 
 type Detector = {
@@ -161,6 +162,42 @@ function showToast(msg: string, kind: 'ok' | 'err') {
   toastTimer = window.setTimeout(() => (toast.value = null), 3500);
 }
 
+const lightOn = computed(() => {
+  const arr = snapshot.value.lights_report || [];
+  const cl = arr.find((l) => l.node === 'chamber_light');
+  return (cl?.mode || 'off').toLowerCase() === 'on';
+});
+const lightBusy = ref(false);
+
+function patchLightLocal(mode: 'on' | 'off') {
+  const arr = [...(snapshot.value.lights_report || [])];
+  const idx = arr.findIndex((l) => l.node === 'chamber_light');
+  if (idx >= 0) arr[idx] = { ...arr[idx], mode };
+  else arr.push({ node: 'chamber_light', mode });
+  snapshot.value = { ...snapshot.value, lights_report: arr };
+}
+
+async function toggleLight() {
+  const target: 'on' | 'off' = lightOn.value ? 'off' : 'on';
+  const prev: 'on' | 'off' = lightOn.value ? 'on' : 'off';
+  patchLightLocal(target);
+  lightBusy.value = true;
+  try {
+    const r = await fetch(`/api/light/${target}`, { method: 'POST' });
+    const body = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+    if (!r.ok || !body.ok) {
+      patchLightLocal(prev);
+      showToast(`Light failed: ${body.error ?? r.status}`, 'err');
+    }
+  } catch (e) {
+    patchLightLocal(prev);
+    showToast(`Light error: ${(e as Error).message}`, 'err');
+  } finally {
+    lightBusy.value = false;
+    tickSnapshot();
+  }
+}
+
 async function sendControl(action: Action) {
   sending.value = action;
   try {
@@ -268,6 +305,14 @@ async function confirmStopYes() {
               @click="requestStop"
             >
               {{ sending === 'stop' ? '…' : 'Stop' }}
+            </button>
+            <button
+              class="pill px-3 py-1.5 text-sm ring-1 ring-line disabled:opacity-40 disabled:cursor-not-allowed hover:bg-bg-tile"
+              :class="lightOn ? 'bg-yellow-100 ring-yellow-400/60' : ''"
+              :disabled="lightBusy"
+              @click="toggleLight"
+            >
+              {{ lightBusy ? '…' : (lightOn ? 'Light off' : 'Light on') }}
             </button>
           </div>
         </div>

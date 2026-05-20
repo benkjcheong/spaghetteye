@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 VALID_ACTIONS = ("pause", "resume", "stop")
+VALID_LIGHT_MODES = ("on", "off")
 
 
 class PrinterControl:
@@ -57,6 +58,35 @@ class PrinterControl:
                 kind=f"control_{action}",
                 title=f"Print {action}" + (" (auto)" if source == "auto_pause" else ""),
                 detail=f"source={source} seq={seq} ok={ok}",
+            )
+        )
+        return ok, seq
+
+    def set_light(self, mode: str, *, node: str = "chamber_light") -> tuple[bool, str]:
+        if mode not in VALID_LIGHT_MODES:
+            raise ValueError(f"invalid light mode: {mode}")
+        with self._lock:
+            seq = str(next(self._seq))
+        payload = {
+            "system": {
+                "sequence_id": seq,
+                "command": "ledctrl",
+                "led_node": node,
+                "led_mode": mode,
+                "led_on_time": 500,
+                "led_off_time": 500,
+                "loop_times": 0,
+                "interval_time": 0,
+            }
+        }
+        info = self._client.publish(self._topic, json.dumps(payload), qos=0)
+        ok = info.rc == mqtt.MQTT_ERR_SUCCESS
+        log.info("ledctrl node=%s mode=%s seq=%s ok=%s", node, mode, seq, ok)
+        self._app_state.push_event(
+            Event(
+                kind=f"light_{mode}",
+                title=f"Light {mode}",
+                detail=f"node={node} seq={seq} ok={ok}",
             )
         )
         return ok, seq
