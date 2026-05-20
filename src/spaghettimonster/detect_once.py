@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from .camera_stream import BambuCameraClient, CameraConfig
+from .camera_stream import BambuCameraClient, CameraConfig, CameraUnavailableError
 from .config import load_config, setup_logging
 from .failure_detector import LocalFailureDetector
 
@@ -41,9 +41,18 @@ def _cli() -> int:
         threshold=cfg.spaghetti_detection_threshold,
     )
 
-    frame = camera.capture_frame(timeout_sec=args.timeout)
+    try:
+        frame = camera.capture_frame(timeout_sec=args.timeout)
+    except CameraUnavailableError as exc:
+        print(f"Camera capture failed. {exc}")
+        print("Hint: close any other Bambu liveview client and make sure liveview is enabled on the printer.")
+        return 1
     if not frame:
-        print("No frame captured.")
+        detail = getattr(camera, "last_capture_diagnostic", None)
+        if detail:
+            print(f"No frame captured. {detail}")
+        else:
+            print("No frame captured.")
         return 1
 
     saved_to = None

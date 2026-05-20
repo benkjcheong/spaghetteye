@@ -6,6 +6,7 @@ python -m spaghettimonster
 Optional AI spaghetti detection:
 
 - Requires Bambu Studio installed locally so `libBambuSource.dylib` is present.
+- Requires `ffmpeg` on your `PATH` to decode the printer's liveview H.264 stream into a JPEG frame for the detector.
 - Runs fully locally after the model file is downloaded once.
 - Requires the printer liveview camera to be enabled on the printer.
 - The A1 liveview path only supports one active client well, so close any competing liveview session first.
@@ -33,7 +34,7 @@ python -m spaghettimonster.detect_once --save /tmp/a1-frame.jpg
 
 That will:
 
-- capture one JPEG frame from the A1 local camera stream
+- capture and decode one frame from the A1 local camera stream
 - run the local failure model once
 - print a JSON result
 - save the captured frame if you pass `--save`
