@@ -15,7 +15,7 @@ class Event:
     hms_code: str | None = None
 
     def format(self) -> str:
-        lines = [f"[Spaghetti Monster] {self.title}"]
+        lines = [f"[App] {self.title}"]
         if self.file:
             lines.append(f"File: {self.file}")
         if self.layer is not None and self.layer_total is not None:

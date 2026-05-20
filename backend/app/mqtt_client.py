@@ -43,7 +43,7 @@ def build_client(
     access_code: str,
     on_payload: MessageHandler,
 ) -> mqtt.Client:
-    client_id = f"spaghettimonster-{uuid.uuid4().hex[:8]}"
+    client_id = f"app-{uuid.uuid4().hex[:8]}"
     client = _PatchedClient(
         callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
         client_id=client_id,

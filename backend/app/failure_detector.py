@@ -135,7 +135,7 @@ class LocalFailureDetector:
                 raise DetectionError(f"Configured local model path does not exist: {path}")
             return path
 
-        cache_dir = Path.home() / ".cache" / "spaghettimonster"
+        cache_dir = Path.home() / ".cache" / "app"
         cache_dir.mkdir(parents=True, exist_ok=True)
         path = cache_dir / _DEFAULT_MODEL_NAME
         if path.exists():

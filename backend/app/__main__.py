@@ -14,13 +14,13 @@ from .spaghetti_monitor import SpaghettiMonitor
 from .state import StateTracker
 from .telegram import TelegramNotifier
 
-log = logging.getLogger("spaghettimonster")
+log = logging.getLogger("app")
 
 
 def run() -> int:
     cfg = load_config()
     setup_logging(cfg.log_level)
-    log.info("starting spaghettimonster v1 (printer=%s)", cfg.printer_serial)
+    log.info("starting app v1 (printer=%s)", cfg.printer_serial)
 
     app_state = AppState()
 

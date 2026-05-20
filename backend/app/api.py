@@ -112,7 +112,7 @@ class AppState:
 
 
 def build_app(state: AppState) -> FastAPI:
-    app = FastAPI(title="Spaghetti Monster API", version="0.1.0")
+    app = FastAPI(title="App API", version="0.1.0")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
