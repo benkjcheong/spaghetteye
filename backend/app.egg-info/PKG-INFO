@@ -11,3 +11,4 @@ Requires-Dist: onnxruntime>=1.18
 Requires-Dist: Pillow>=10.0
 Requires-Dist: fastapi>=0.110
 Requires-Dist: uvicorn>=0.27
+Requires-Dist: python-multipart>=0.0.9

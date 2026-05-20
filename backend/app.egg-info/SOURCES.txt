@@ -7,7 +7,9 @@ app/camera_stream.py
 app/config.py
 app/events.py
 app/failure_detector.py
+app/ftps_upload.py
 app/mqtt_client.py
+app/printer_control.py
 app/spaghetti_monitor.py
 app/state.py
 app/telegram.py

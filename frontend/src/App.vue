@@ -15,7 +15,7 @@ type Detector = {
 
 const snapshot = ref<Snapshot>({});
 const detector = ref<Detector | null>(null);
-const frameSrc = ref(`/api/frame.jpg?ts=${Date.now()}`);
+const frameSrc = ref('');
 const frameError = ref(false);
 
 type StreamMessage =
@@ -36,7 +36,10 @@ function connectStream() {
       const msg = JSON.parse(ev.data) as StreamMessage;
       if (msg.type === 'snapshot') snapshot.value = msg.data;
       else if (msg.type === 'detector') detector.value = msg.data;
-      else if (msg.type === 'frame') frameSrc.value = `/api/frame.jpg?ts=${msg.ts}`;
+      else if (msg.type === 'frame') {
+        frameError.value = false;
+        frameSrc.value = `/api/frame.jpg?ts=${msg.ts}`;
+      }
     } catch {}
   };
   es.onerror = () => {
@@ -353,9 +356,9 @@ async function confirmStopYes() {
 
     <main class="col-span-6 flex">
       <div class="w-full h-full bg-bg-tile rounded-xl ring-1 ring-line overflow-hidden flex items-center justify-center">
-        <div v-if="frameError" class="text-text-muted font-mono text-sm text-center px-6">No frame yet.</div>
+        <div v-if="!frameSrc || frameError" class="text-text-muted font-mono text-sm text-center px-6">No frame yet.</div>
         <img
-          v-else
+          v-show="frameSrc && !frameError"
           :src="frameSrc"
           alt="printer camera"
           class="w-full h-full object-contain"

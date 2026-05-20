@@ -79,6 +79,9 @@ class SpaghettiMonitor:
         except Exception as exc:
             log.warning("camera capture failed: %s", exc)
             frame = None
+        if not frame:
+            diag = getattr(self._camera, "last_capture_diagnostic", None)
+            log.warning("camera capture returned no frame%s", f": {diag}" if diag else "")
 
         now_active = snapshot.get("gcode_state") == "RUNNING"
         if not now_active:
