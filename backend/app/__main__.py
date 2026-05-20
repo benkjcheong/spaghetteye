@@ -53,7 +53,13 @@ def run() -> int:
         on_payload=handle_payload,
     )
 
-    control = PrinterControl(client, cfg.printer_serial, app_state)
+    control = PrinterControl(
+        client,
+        cfg.printer_serial,
+        app_state,
+        printer_ip=cfg.printer_ip,
+        access_code=cfg.access_code,
+    )
     control_holder["ctrl"] = control
     app_state.bind_control(control)
 

@@ -10,17 +10,27 @@ from dataclasses import asdict
 from typing import Any
 
 import uvicorn
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, File, Form, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from .events import Event
 from .failure_detector import DetectionResult
+from .ftps_upload import FtpsUploadError
 from .printer_control import VALID_ACTIONS, PrinterControl
 
 log = logging.getLogger(__name__)
 
 _EVENT_BUFFER_SIZE = 200
+
+
+def _safe_remote_name(name: str) -> str:
+    base = name.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    cleaned = "".join(ch if ch.isalnum() or ch in ("-", "_", ".", " ") else "_" for ch in base)
+    cleaned = cleaned.strip().replace(" ", "_") or "upload.3mf"
+    if not cleaned.lower().endswith(".3mf"):
+        cleaned += ".3mf"
+    return cleaned[:120]
 
 
 class AppState:
@@ -178,6 +188,54 @@ def build_app(state: AppState) -> FastAPI:
             )
         ok, seq = ctrl.publish_command(action, source="api")
         return JSONResponse({"ok": ok, "sequence_id": seq}, status_code=200 if ok else 502)
+
+    @app.post("/api/print/start")
+    async def print_start(
+        file: UploadFile = File(...),
+        plate: int = Form(1),
+        use_ams: bool = Form(False),
+        bed_leveling: bool = Form(True),
+        flow_cali: bool = Form(False),
+        vibration_cali: bool = Form(True),
+        layer_inspect: bool = Form(False),
+        timelapse: bool = Form(False),
+    ) -> Response:
+        if not file.filename or not file.filename.lower().endswith(".3mf"):
+            return JSONResponse({"ok": False, "error": "must_be_3mf"}, status_code=400)
+        ctrl = state.control()
+        if ctrl is None or not ctrl.is_connected():
+            return JSONResponse({"ok": False, "error": "mqtt_disconnected"}, status_code=503)
+        snap = state.snapshot()
+        gcode = str(snap.get("gcode_state") or "").upper()
+        if gcode not in {"IDLE", "FINISH", "FAILED", ""}:
+            return JSONResponse(
+                {"ok": False, "error": "busy", "gcode_state": gcode},
+                status_code=409,
+            )
+
+        safe_name = _safe_remote_name(file.filename)
+        subtask = safe_name.rsplit(".", 1)[0]
+        try:
+            ok, seq = ctrl.upload_and_start(
+                src=file.file,
+                remote_name=safe_name,
+                subtask_name=subtask,
+                plate=plate,
+                use_ams=use_ams,
+                bed_leveling=bed_leveling,
+                flow_cali=flow_cali,
+                vibration_cali=vibration_cali,
+                layer_inspect=layer_inspect,
+                timelapse=timelapse,
+            )
+        except FtpsUploadError as exc:
+            return JSONResponse({"ok": False, "error": "ftps_failed", "detail": str(exc)}, status_code=502)
+        finally:
+            await file.close()
+        return JSONResponse(
+            {"ok": ok, "sequence_id": seq, "remote_name": safe_name},
+            status_code=200 if ok else 502,
+        )
 
     @app.get("/api/stream")
     async def stream() -> StreamingResponse:

@@ -98,6 +98,57 @@ type Action = 'pause' | 'resume' | 'stop';
 const canPause = computed(() => state.value === 'RUNNING');
 const canResume = computed(() => state.value === 'PAUSE');
 const canStop = computed(() => state.value === 'RUNNING' || state.value === 'PAUSE');
+const canStart = computed(() => ['IDLE', 'FINISH', 'FAILED', ''].includes(state.value));
+
+const fileInput = ref<HTMLInputElement | null>(null);
+const selectedFile = ref<File | null>(null);
+const uploading = ref(false);
+const uploadProgress = ref(0);
+
+function onFileChosen(e: Event) {
+  const f = (e.target as HTMLInputElement).files?.[0] ?? null;
+  if (f && !f.name.toLowerCase().endsWith('.3mf')) {
+    showToast('Must be a .3mf file', 'err');
+    selectedFile.value = null;
+    if (fileInput.value) fileInput.value.value = '';
+    return;
+  }
+  selectedFile.value = f;
+}
+
+function startUpload() {
+  const f = selectedFile.value;
+  if (!f) return;
+  uploading.value = true;
+  uploadProgress.value = 0;
+  const form = new FormData();
+  form.append('file', f);
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/api/print/start');
+  xhr.upload.onprogress = (ev) => {
+    if (ev.lengthComputable) uploadProgress.value = Math.round((ev.loaded / ev.total) * 100);
+  };
+  xhr.onload = () => {
+    uploading.value = false;
+    let body: { ok?: boolean; error?: string; detail?: string } = {};
+    try {
+      body = JSON.parse(xhr.responseText);
+    } catch {}
+    if (xhr.status >= 200 && xhr.status < 300 && body.ok) {
+      showToast('Print sent', 'ok');
+      selectedFile.value = null;
+      if (fileInput.value) fileInput.value.value = '';
+      tickSnapshot();
+    } else {
+      showToast(`Print failed: ${body.error ?? xhr.status}${body.detail ? ' — ' + body.detail : ''}`, 'err');
+    }
+  };
+  xhr.onerror = () => {
+    uploading.value = false;
+    showToast('Upload error', 'err');
+  };
+  xhr.send(form);
+}
 
 const confirmStop = ref(false);
 const toast = ref<{ msg: string; kind: 'ok' | 'err' } | null>(null);
@@ -159,6 +210,33 @@ async function confirmStopYes() {
         <div>
           <div class="text-xs uppercase tracking-wider text-text-muted">ETA</div>
           <div class="mt-2 font-mono text-xl">{{ eta }}</div>
+        </div>
+
+        <div>
+          <div class="text-xs uppercase tracking-wider text-text-muted">New print</div>
+          <div class="mt-2 space-y-2">
+            <input
+              ref="fileInput"
+              type="file"
+              accept=".3mf"
+              class="block w-full text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:ring-1 file:ring-line file:text-sm file:bg-bg-tile hover:file:bg-bg-tile/70"
+              :disabled="uploading"
+              @change="onFileChosen"
+            />
+            <div v-if="selectedFile" class="font-mono text-xs text-text-muted break-all">
+              {{ selectedFile.name }} ({{ Math.round(selectedFile.size / 1024) }} KB)
+            </div>
+            <div v-if="uploading" class="w-full h-2 bg-bg-tile rounded overflow-hidden ring-1 ring-line">
+              <div class="h-full bg-state-running transition-all" :style="{ width: uploadProgress + '%' }"></div>
+            </div>
+            <button
+              class="pill px-3 py-1.5 text-sm ring-1 ring-line disabled:opacity-40 disabled:cursor-not-allowed hover:bg-bg-tile"
+              :disabled="!selectedFile || !canStart || uploading"
+              @click="startUpload"
+            >
+              {{ uploading ? `Uploading ${uploadProgress}%` : 'Send & print' }}
+            </button>
+          </div>
         </div>
 
         <div>
