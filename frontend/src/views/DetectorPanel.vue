@@ -1,50 +1,34 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { fetchDetector, type DetectorStatus } from '../api/client';
+import { computed, onUnmounted } from 'vue';
+import ProgressRing from '../components/ProgressRing.vue';
+import { useDetector } from '../composables/useDetector';
 
-const status = ref<DetectorStatus | null>(null);
-const error = ref<string | null>(null);
-let timer: number | undefined;
+const det = useDetector();
+const { status, history, error } = det;
 
-async function tick() {
-  try {
-    status.value = await fetchDetector();
-    error.value = null;
-  } catch (e) {
-    error.value = (e as Error).message;
-  }
-}
+onUnmounted(() => det.release());
 
-onMounted(() => {
-  tick();
-  timer = window.setInterval(tick, 3000);
-});
-
-onUnmounted(() => {
-  if (timer) window.clearInterval(timer);
-});
-
-const enabledBadge = computed(() => {
-  if (!status.value) return 'bg-slate-700/40 text-slate-300 ring-slate-600/40';
-  return status.value.enabled
-    ? 'bg-emerald-500/20 text-emerald-300 ring-emerald-500/40'
-    : 'bg-slate-700/40 text-slate-400 ring-slate-600/40';
-});
-
-const alertBadge = computed(() => {
-  if (!status.value?.alerted) return 'bg-slate-700/40 text-slate-400 ring-slate-600/40';
-  return 'bg-rose-500/20 text-rose-300 ring-rose-500/40';
-});
-
-function fmtConf(v: number | null) {
-  return v === null ? '—' : `${(v * 100).toFixed(1)}%`;
-}
+const confidence = computed(() => Math.round((status.value?.last_confidence ?? 0) * 100));
 
 function fmtTick(ts: number | null) {
   if (!ts) return '—';
   const ago = Math.max(0, Math.round(Date.now() / 1000 - ts));
   return `${ago}s ago`;
 }
+
+const sparkPath = computed(() => {
+  const data = history.value;
+  if (data.length < 2) return '';
+  const w = 320;
+  const h = 60;
+  const xStep = w / (data.length - 1);
+  return data
+    .map((v, i) => {
+      const y = h - Math.max(0, Math.min(1, v)) * h;
+      return `${i === 0 ? 'M' : 'L'} ${(i * xStep).toFixed(2)} ${y.toFixed(2)}`;
+    })
+    .join(' ');
+});
 </script>
 
 <template>
@@ -52,52 +36,66 @@ function fmtTick(ts: number | null) {
     <div class="flex items-baseline justify-between">
       <h2 class="font-mono text-xl">Spaghetti Detector</h2>
       <span
-        class="inline-flex px-2 py-0.5 rounded text-xs ring-1 font-mono"
-        :class="enabledBadge"
+        class="pill"
+        :class="status?.enabled ? 'text-brand ring-brand/40 bg-brand-soft' : 'text-text-muted ring-line bg-bg-tile'"
       >
         {{ status?.enabled ? 'enabled' : 'disabled' }}
       </span>
     </div>
 
-    <div v-if="error" class="rounded bg-rose-500/10 border border-rose-500/30 text-rose-300 px-4 py-2 text-sm font-mono">
+    <div v-if="error" class="tile-tight bg-state-fail/10 ring-state-fail/30 text-state-fail text-sm font-mono">
       {{ error }}
     </div>
 
-    <div v-if="!status?.enabled" class="bg-panel rounded-lg ring-1 ring-slate-800 px-5 py-4 text-sm text-slate-400">
-      AI detection is off. Set <code class="font-mono text-slate-200">SPAGHETTI_AI_ENABLED=true</code> in your backend
-      <code class="font-mono text-slate-200">.env</code> and restart the daemon.
+    <div v-if="!status?.enabled" class="tile-pad text-sm text-text-muted">
+      AI detection is off. Set <code class="font-mono text-text-primary">SPAGHETTI_AI_ENABLED=true</code>
+      in the backend <code class="font-mono text-text-primary">.env</code> and restart.
     </div>
 
-    <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div class="bg-panel rounded-lg p-5 ring-1 ring-slate-800">
-        <div class="text-xs uppercase text-slate-500 font-mono">Last Tick</div>
-        <div class="mt-2 text-2xl font-mono">{{ fmtTick(status?.last_tick_ts ?? null) }}</div>
+    <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="tile-pad md:col-span-1 flex flex-col items-center justify-center gap-3">
+        <ProgressRing
+          :value="confidence"
+          :size="180"
+          :stroke="14"
+          color="#d946ef"
+          label="Last Confidence"
+        />
       </div>
 
-      <div class="bg-panel rounded-lg p-5 ring-1 ring-slate-800">
-        <div class="text-xs uppercase text-slate-500 font-mono">Last Confidence</div>
-        <div class="mt-2 text-2xl font-mono">{{ fmtConf(status?.last_confidence ?? null) }}</div>
-      </div>
+      <div class="tile-pad md:col-span-2 space-y-4">
+        <div class="grid grid-cols-3 gap-4">
+          <div>
+            <div class="text-[11px] uppercase tracking-wider text-text-muted">Last Tick</div>
+            <div class="font-mono text-2xl mt-1">{{ fmtTick(status?.last_tick_ts ?? null) }}</div>
+          </div>
+          <div>
+            <div class="text-[11px] uppercase tracking-wider text-text-muted">Consec. Hits</div>
+            <div class="font-mono text-2xl mt-1">{{ status?.consecutive_hits ?? 0 }}</div>
+          </div>
+          <div>
+            <div class="text-[11px] uppercase tracking-wider text-text-muted">Alert</div>
+            <span
+              class="pill mt-1.5"
+              :class="status?.alerted ? 'text-state-fail ring-state-fail/40 bg-state-fail/10' : 'text-text-muted ring-line bg-bg-tile'"
+            >
+              {{ status?.alerted ? 'fired' : 'no' }}
+            </span>
+          </div>
+        </div>
 
-      <div class="bg-panel rounded-lg p-5 ring-1 ring-slate-800">
-        <div class="text-xs uppercase text-slate-500 font-mono">Consecutive Hits</div>
-        <div class="mt-2 text-2xl font-mono">{{ status?.consecutive_hits ?? 0 }}</div>
-      </div>
+        <div>
+          <div class="text-[11px] uppercase tracking-wider text-text-muted mb-2">Confidence (last {{ history.length }} ticks)</div>
+          <svg viewBox="0 0 320 60" class="w-full h-16 bg-bg-tile/40 rounded ring-1 ring-line">
+            <path :d="sparkPath" stroke="#d946ef" stroke-width="2" fill="none" />
+          </svg>
+        </div>
 
-      <div class="bg-panel rounded-lg p-5 ring-1 ring-slate-800">
-        <div class="text-xs uppercase text-slate-500 font-mono">Alert Fired</div>
-        <span
-          class="mt-2 inline-flex px-2 py-0.5 rounded text-xs ring-1 font-mono"
-          :class="alertBadge"
-        >
-          {{ status?.alerted ? 'YES' : 'no' }}
-        </span>
-      </div>
-
-      <div class="bg-panel rounded-lg p-5 ring-1 ring-slate-800 md:col-span-2">
-        <div class="text-xs uppercase text-slate-500 font-mono">Last Detector Summary</div>
-        <div class="mt-2 text-sm font-mono text-slate-300 break-words">
-          {{ status?.last_summary ?? '—' }}
+        <div>
+          <div class="text-[11px] uppercase tracking-wider text-text-muted">Last Summary</div>
+          <div class="font-mono text-sm text-text-primary/90 mt-1 break-words">
+            {{ status?.last_summary ?? '—' }}
+          </div>
         </div>
       </div>
     </div>

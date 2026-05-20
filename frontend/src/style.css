@@ -2,8 +2,64 @@
 @tailwind components;
 @tailwind utilities;
 
-html,
-body,
-#app {
-  height: 100%;
+@layer base {
+  html,
+  body,
+  #app {
+    height: 100%;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-bg-deep text-text-primary font-sans antialiased;
+    background-image: radial-gradient(circle at top, rgba(0, 174, 66, 0.08), transparent 60%),
+      linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+    background-size: auto, 36px 36px, 36px 36px;
+    background-attachment: fixed;
+  }
+  ::selection {
+    background: rgba(0, 174, 66, 0.35);
+  }
+}
+
+@layer components {
+  .tile {
+    @apply bg-bg-panel/80 backdrop-blur rounded-xl ring-1 ring-line shadow-tile;
+  }
+  .tile-tight {
+    @apply tile p-4;
+  }
+  .tile-pad {
+    @apply tile p-5;
+  }
+  .pill {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono ring-1;
+  }
+  .nav-link {
+    @apply px-3 py-1.5 rounded-md text-sm font-mono text-text-muted hover:text-text-primary transition;
+  }
+  .nav-link-active {
+    @apply !text-brand bg-brand-soft;
+  }
+}
+
+@layer utilities {
+  .text-muted {
+    color: theme('colors.text.muted');
+  }
+  .anim-pulse-soft {
+    animation: pulseSoft 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes pulseSoft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }

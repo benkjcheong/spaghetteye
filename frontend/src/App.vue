@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { RouterLink, RouterView } from 'vue-router';
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import StatusPill from './components/StatusPill.vue';
+import { useSnapshot } from './composables/useSnapshot';
 
 const apiOnline = ref<boolean | null>(null);
+let pingTimer: number | undefined;
 
 async function pingHealth() {
   try {
@@ -13,13 +16,21 @@ async function pingHealth() {
   }
 }
 
+const snap = useSnapshot();
+const state = computed(() => snap.snapshot.value.gcode_state ?? 'IDLE');
+
 onMounted(() => {
   pingHealth();
-  setInterval(pingHealth, 10_000);
+  pingTimer = window.setInterval(pingHealth, 10_000);
+});
+
+onUnmounted(() => {
+  if (pingTimer) window.clearInterval(pingTimer);
+  snap.release();
 });
 
 const nav = [
-  { to: '/', label: 'Status' },
+  { to: '/', label: 'Overview' },
   { to: '/events', label: 'Events' },
   { to: '/camera', label: 'Camera' },
   { to: '/detector', label: 'Detector' },
@@ -27,37 +38,61 @@ const nav = [
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col">
-    <header class="border-b border-slate-800 bg-panel/60 backdrop-blur sticky top-0 z-10">
-      <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-        <div class="flex items-center gap-3">
+  <div class="min-h-screen flex flex-col pb-20 md:pb-0">
+    <header class="border-b border-line bg-bg-panel/70 backdrop-blur sticky top-0 z-20">
+      <div class="max-w-6xl mx-auto px-5 py-3 flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3 min-w-0">
           <span class="text-2xl">🍝</span>
-          <h1 class="font-mono text-lg tracking-wider">spaghetti monster</h1>
+          <div class="leading-tight">
+            <div class="font-mono text-sm tracking-wider">spaghetti monster</div>
+            <div class="text-[10px] uppercase tracking-[0.18em] text-text-muted">Bambu A1</div>
+          </div>
         </div>
-        <nav class="flex items-center gap-1">
+
+        <nav class="hidden md:flex items-center gap-1">
           <RouterLink
             v-for="item in nav"
             :key="item.to"
             :to="item.to"
-            class="px-3 py-1.5 rounded text-sm font-mono text-slate-400 hover:text-slate-100"
-            active-class="!text-accent bg-slate-800/60"
+            class="nav-link"
+            active-class="nav-link-active"
           >
             {{ item.label }}
           </RouterLink>
         </nav>
-        <div class="flex items-center gap-2 font-mono text-xs">
-          <span
-            class="inline-block w-2 h-2 rounded-full"
-            :class="apiOnline === null ? 'bg-slate-500' : apiOnline ? 'bg-emerald-400' : 'bg-rose-500'"
-          ></span>
-          <span class="text-slate-400">
-            {{ apiOnline === null ? 'checking' : apiOnline ? 'api online' : 'api offline' }}
+
+        <div class="flex items-center gap-3">
+          <StatusPill :state="state" />
+          <span class="flex items-center gap-1.5 font-mono text-[11px] text-text-muted">
+            <span
+              class="inline-block w-2 h-2 rounded-full"
+              :class="apiOnline === null ? 'bg-state-idle' : apiOnline ? 'bg-brand' : 'bg-state-fail'"
+            ></span>
+            {{ apiOnline === null ? '…' : apiOnline ? 'api' : 'offline' }}
           </span>
         </div>
       </div>
     </header>
-    <main class="flex-1 max-w-6xl w-full mx-auto px-6 py-6">
+
+    <main class="flex-1 max-w-6xl w-full mx-auto px-5 py-6">
       <RouterView />
     </main>
+
+    <!-- Mobile bottom nav -->
+    <nav
+      class="md:hidden fixed inset-x-0 bottom-0 z-20 border-t border-line bg-bg-panel/90 backdrop-blur"
+    >
+      <div class="max-w-6xl mx-auto grid grid-cols-4">
+        <RouterLink
+          v-for="item in nav"
+          :key="item.to"
+          :to="item.to"
+          class="text-center py-2.5 text-xs font-mono text-text-muted"
+          active-class="!text-brand"
+        >
+          {{ item.label }}
+        </RouterLink>
+      </div>
+    </nav>
   </div>
 </template>
