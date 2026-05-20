@@ -245,167 +245,173 @@ async function confirmStopYes() {
 </script>
 
 <template>
-  <div class="h-screen w-screen p-6 grid grid-cols-12 gap-6 bg-white">
-    <aside class="panel col-span-3 justify-between">
-      <div class="space-y-6">
-        <div>
-          <div class="text-xs uppercase tracking-wider text-text-muted">State</div>
-          <div class="mt-2">
-            <span class="pill px-3 py-1.5 text-sm" :class="stateView.cls">
-              {{ stateView.label }}
-            </span>
-          </div>
-        </div>
-
-        <div>
-          <div class="text-xs uppercase tracking-wider text-text-muted">File</div>
-          <div class="mt-2 font-mono text-xl break-all">{{ file }}</div>
-        </div>
-
-        <div>
-          <div class="text-xs uppercase tracking-wider text-text-muted">ETA</div>
-          <div class="mt-2 font-mono text-xl">{{ eta }}</div>
-        </div>
-
-        <div>
-          <div class="text-xs uppercase tracking-wider text-text-muted">New print</div>
-          <div class="mt-2 space-y-2">
-            <input
-              ref="fileInput"
-              type="file"
-              accept=".3mf"
-              class="block w-full text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:ring-1 file:ring-line file:text-sm file:bg-bg-tile hover:file:bg-bg-tile/70"
-              :disabled="uploading"
-              @change="onFileChosen"
-            />
-            <div v-if="selectedFile" class="font-mono text-xs text-text-muted break-all">
-              {{ selectedFile.name }} ({{ Math.round(selectedFile.size / 1024) }} KB)
+  <div class="min-h-screen w-full bg-white p-3 sm:p-4 lg:p-6 xl:h-screen">
+    <div class="mx-auto grid min-h-full max-w-screen-2xl grid-cols-1 gap-4 lg:gap-6 xl:grid-cols-12">
+      <aside class="panel order-2 xl:order-1 xl:col-span-3 xl:justify-between">
+        <div class="space-y-6">
+          <div>
+            <div class="text-xs uppercase tracking-wider text-text-muted">State</div>
+            <div class="mt-2">
+              <span class="pill px-3 py-1.5 text-sm" :class="stateView.cls">
+                {{ stateView.label }}
+              </span>
             </div>
-            <div v-if="uploading" class="w-full h-2 bg-bg-tile rounded overflow-hidden ring-1 ring-line">
-              <div class="h-full bg-state-running transition-all" :style="{ width: uploadProgress + '%' }"></div>
+          </div>
+
+          <div>
+            <div class="text-xs uppercase tracking-wider text-text-muted">File</div>
+            <div class="mt-2 font-mono text-base break-all sm:text-xl">{{ file }}</div>
+          </div>
+
+          <div>
+            <div class="text-xs uppercase tracking-wider text-text-muted">ETA</div>
+            <div class="mt-2 font-mono text-base sm:text-xl">{{ eta }}</div>
+          </div>
+
+          <div>
+            <div class="text-xs uppercase tracking-wider text-text-muted">New print</div>
+            <div class="mt-2 space-y-2">
+              <input
+                ref="fileInput"
+                type="file"
+                accept=".3mf"
+                class="block w-full text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:ring-1 file:ring-line file:text-sm file:bg-bg-tile hover:file:bg-bg-tile/70"
+                :disabled="uploading"
+                @change="onFileChosen"
+              />
+              <div v-if="selectedFile" class="font-mono text-xs text-text-muted break-all">
+                {{ selectedFile.name }} ({{ Math.round(selectedFile.size / 1024) }} KB)
+              </div>
+              <div v-if="uploading" class="w-full h-2 bg-bg-tile rounded overflow-hidden ring-1 ring-line">
+                <div class="h-full bg-state-running transition-all" :style="{ width: uploadProgress + '%' }"></div>
+              </div>
+              <button
+                class="pill w-full justify-center px-3 py-2 text-sm ring-1 ring-line hover:bg-bg-tile disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
+                :disabled="!selectedFile || !canStart || uploading"
+                @click="startUpload"
+              >
+                {{
+                  !uploading
+                    ? 'Send & print'
+                    : uploadProgress < 100
+                      ? `Uploading ${uploadProgress}%`
+                      : 'Sending to printer…'
+                }}
+              </button>
             </div>
-            <button
-              class="pill px-3 py-1.5 text-sm ring-1 ring-line disabled:opacity-40 disabled:cursor-not-allowed hover:bg-bg-tile"
-              :disabled="!selectedFile || !canStart || uploading"
-              @click="startUpload"
-            >
-              {{
-                !uploading
-                  ? 'Send & print'
-                  : uploadProgress < 100
-                    ? `Uploading ${uploadProgress}%`
-                    : 'Sending to printer…'
-              }}
-            </button>
+          </div>
+
+          <div>
+            <div class="text-xs uppercase tracking-wider text-text-muted">Control</div>
+            <div class="mt-2 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+              <button
+                class="pill min-h-11 justify-center px-3 py-2 text-sm ring-1 ring-line hover:bg-bg-tile disabled:cursor-not-allowed disabled:opacity-40"
+                :disabled="!canPause || sending !== null"
+                @click="sendControl('pause')"
+              >
+                {{ sending === 'pause' ? '…' : 'Pause' }}
+              </button>
+              <button
+                class="pill min-h-11 justify-center px-3 py-2 text-sm ring-1 ring-line hover:bg-bg-tile disabled:cursor-not-allowed disabled:opacity-40"
+                :disabled="!canResume || sending !== null"
+                @click="sendControl('resume')"
+              >
+                {{ sending === 'resume' ? '…' : 'Resume' }}
+              </button>
+              <button
+                class="pill min-h-11 justify-center px-3 py-2 text-sm ring-1 ring-state-fail/40 bg-state-fail/10 text-state-fail hover:bg-state-fail/20 disabled:cursor-not-allowed disabled:opacity-40"
+                :disabled="!canStop || sending !== null"
+                @click="requestStop"
+              >
+                {{ sending === 'stop' ? '…' : 'Stop' }}
+              </button>
+              <button
+                class="pill min-h-11 justify-center px-3 py-2 text-sm ring-1 ring-line hover:bg-bg-tile disabled:cursor-not-allowed disabled:opacity-40"
+                :class="lightOn ? 'bg-yellow-100 ring-yellow-400/60' : ''"
+                :disabled="lightBusy"
+                @click="toggleLight"
+              >
+                {{ lightBusy ? '…' : (lightOn ? 'Light off' : 'Light on') }}
+              </button>
+            </div>
           </div>
         </div>
+      </aside>
 
-        <div>
-          <div class="text-xs uppercase tracking-wider text-text-muted">Control</div>
-          <div class="mt-2 flex flex-wrap gap-2">
+      <div
+        v-if="confirmStop"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+        @click.self="confirmStop = false"
+      >
+        <div class="mx-4 w-full max-w-sm rounded-xl bg-white p-6 shadow-xl ring-1 ring-line">
+          <div class="text-lg font-semibold">Stop print?</div>
+          <div class="mt-2 text-sm text-text-muted">
+            This cancels the current print on the printer. The print cannot be resumed afterwards.
+          </div>
+          <div class="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <button
-              class="pill px-3 py-1.5 text-sm ring-1 ring-line disabled:opacity-40 disabled:cursor-not-allowed hover:bg-bg-tile"
-              :disabled="!canPause || sending !== null"
-              @click="sendControl('pause')"
+              class="pill w-full justify-center px-3 py-2 text-sm ring-1 ring-line hover:bg-bg-tile sm:w-auto"
+              @click="confirmStop = false"
             >
-              {{ sending === 'pause' ? '…' : 'Pause' }}
+              Cancel
             </button>
             <button
-              class="pill px-3 py-1.5 text-sm ring-1 ring-line disabled:opacity-40 disabled:cursor-not-allowed hover:bg-bg-tile"
-              :disabled="!canResume || sending !== null"
-              @click="sendControl('resume')"
+              class="pill w-full justify-center px-3 py-2 text-sm ring-1 ring-state-fail/40 bg-state-fail/10 text-state-fail hover:bg-state-fail/20 sm:w-auto"
+              @click="confirmStopYes"
             >
-              {{ sending === 'resume' ? '…' : 'Resume' }}
-            </button>
-            <button
-              class="pill px-3 py-1.5 text-sm ring-1 ring-state-fail/40 text-state-fail bg-state-fail/10 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-state-fail/20"
-              :disabled="!canStop || sending !== null"
-              @click="requestStop"
-            >
-              {{ sending === 'stop' ? '…' : 'Stop' }}
-            </button>
-            <button
-              class="pill px-3 py-1.5 text-sm ring-1 ring-line disabled:opacity-40 disabled:cursor-not-allowed hover:bg-bg-tile"
-              :class="lightOn ? 'bg-yellow-100 ring-yellow-400/60' : ''"
-              :disabled="lightBusy"
-              @click="toggleLight"
-            >
-              {{ lightBusy ? '…' : (lightOn ? 'Light off' : 'Light on') }}
+              Stop print
             </button>
           </div>
         </div>
       </div>
-    </aside>
 
-    <div
-      v-if="confirmStop"
-      class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
-      @click.self="confirmStop = false"
-    >
-      <div class="bg-white rounded-xl ring-1 ring-line p-6 max-w-sm shadow-xl">
-        <div class="text-lg font-semibold">Stop print?</div>
-        <div class="mt-2 text-sm text-text-muted">
-          This cancels the current print on the printer. The print cannot be resumed afterwards.
-        </div>
-        <div class="mt-5 flex justify-end gap-2">
-          <button
-            class="pill px-3 py-1.5 text-sm ring-1 ring-line hover:bg-bg-tile"
-            @click="confirmStop = false"
-          >
-            Cancel
-          </button>
-          <button
-            class="pill px-3 py-1.5 text-sm ring-1 ring-state-fail/40 text-state-fail bg-state-fail/10 hover:bg-state-fail/20"
-            @click="confirmStopYes"
-          >
-            Stop print
-          </button>
+      <div
+        v-if="toast"
+        class="fixed left-1/2 top-4 z-50 flex w-[calc(100%-1.5rem)] -translate-x-1/2 justify-center px-2 sm:left-auto sm:right-4 sm:w-auto sm:translate-x-0"
+      >
+        <div
+          class="pill w-full justify-center px-3 py-2 text-sm shadow-md ring-1 sm:w-auto"
+          :class="toast.kind === 'ok' ? GREEN_CLS : RED_CLS"
+        >
+          {{ toast.msg }}
         </div>
       </div>
+
+      <main class="order-1 flex xl:order-2 xl:col-span-6">
+        <div class="flex min-h-[18rem] w-full items-center justify-center overflow-hidden rounded-xl bg-bg-tile ring-1 ring-line sm:min-h-[22rem] xl:min-h-0 xl:h-full">
+          <div v-if="!frameSrc || frameError" class="px-6 text-center font-mono text-sm text-text-muted">No frame yet.</div>
+          <img
+            v-show="frameSrc && !frameError"
+            :src="frameSrc"
+            alt="printer camera"
+            class="w-full h-full object-contain"
+            @error="frameError = true"
+            @load="frameError = false"
+          />
+        </div>
+      </main>
+
+      <aside class="panel order-3 xl:order-3 xl:col-span-3 xl:justify-between">
+        <div class="space-y-6">
+          <div>
+            <div class="text-xs uppercase tracking-wider text-text-muted">Alert</div>
+            <div class="mt-2">
+              <span
+                class="pill px-3 py-1.5 text-sm"
+                :class="detector?.alerted ? RED_CLS : GREEN_CLS"
+              >
+                {{ detector?.alerted ? 'Spaghetti detected' : 'No issues' }}
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <div class="text-xs uppercase tracking-wider text-text-muted">Risk score</div>
+            <div class="mt-2 font-mono text-base sm:text-xl">{{ riskDisplay }}</div>
+            <div class="mt-2 text-sm text-text-muted">{{ riskHint }}</div>
+          </div>
+        </div>
+      </aside>
     </div>
-
-    <div
-      v-if="toast"
-      class="fixed top-4 right-4 z-50 pill px-3 py-1.5 text-sm ring-1 shadow-md"
-      :class="toast.kind === 'ok' ? GREEN_CLS : RED_CLS"
-    >
-      {{ toast.msg }}
-    </div>
-
-    <main class="col-span-6 flex">
-      <div class="w-full h-full bg-bg-tile rounded-xl ring-1 ring-line overflow-hidden flex items-center justify-center">
-        <div v-if="!frameSrc || frameError" class="text-text-muted font-mono text-sm text-center px-6">No frame yet.</div>
-        <img
-          v-show="frameSrc && !frameError"
-          :src="frameSrc"
-          alt="printer camera"
-          class="w-full h-full object-contain"
-          @error="frameError = true"
-          @load="frameError = false"
-        />
-      </div>
-    </main>
-
-    <aside class="panel col-span-3 justify-between">
-      <div class="space-y-6">
-        <div>
-          <div class="text-xs uppercase tracking-wider text-text-muted">Alert</div>
-          <div class="mt-2">
-            <span
-              class="pill px-3 py-1.5 text-sm"
-              :class="detector?.alerted ? RED_CLS : GREEN_CLS"
-            >
-              {{ detector?.alerted ? 'Spaghetti detected' : 'No issues' }}
-            </span>
-          </div>
-        </div>
-
-        <div>
-          <div class="text-xs uppercase tracking-wider text-text-muted">Risk score</div>
-          <div class="mt-2 font-mono text-xl">{{ riskDisplay }}</div>
-          <div class="mt-2 text-sm text-text-muted">{{ riskHint }}</div>
-        </div>
-      </div>
-    </aside>
   </div>
 </template>

@@ -25,6 +25,6 @@
 }
 
 @layer components {
-  .panel { @apply bg-white rounded-xl ring-1 ring-line p-6 flex flex-col; }
+  .panel { @apply bg-white rounded-xl ring-1 ring-line p-4 sm:p-6 flex flex-col; }
   .pill { @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono ring-1; }
 }

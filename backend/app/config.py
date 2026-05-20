@@ -68,7 +68,7 @@ def load_config(env_file: str | Path | None = None) -> Config:
         access_code=_require("ACCESS_CODE"),
         tg_bot_token=_require("TG_BOT_TOKEN"),
         tg_chat_id=_require("TG_CHAT_ID"),
-        log_level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+        log_level="INFO",
         spaghetti_interval_sec=_get_float("SPAGHETTI_INTERVAL_SEC", 5.0),
         camera_library_path=os.environ.get("CAMERA_LIBRARY_PATH", "").strip() or None,
         spaghetti_model_path=os.environ.get("SPAGHETTI_MODEL_PATH", "").strip() or None,
@@ -87,9 +87,9 @@ def load_config(env_file: str | Path | None = None) -> Config:
     )
 
 
-def setup_logging(level: str) -> None:
+def setup_logging(level: str = "INFO") -> None:
     logging.basicConfig(
-        level=getattr(logging, level, logging.INFO),
+        level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
