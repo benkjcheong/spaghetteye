@@ -2,8 +2,6 @@ import { ref } from 'vue';
 import { fetchSnapshot, type PrinterSnapshot } from '../api/client';
 
 const snapshot = ref<PrinterSnapshot>({});
-const lastUpdate = ref<number | null>(null);
-const error = ref<string | null>(null);
 
 let refCount = 0;
 let timer: number | undefined;
@@ -11,10 +9,8 @@ let timer: number | undefined;
 async function tick() {
   try {
     snapshot.value = await fetchSnapshot();
-    lastUpdate.value = Date.now();
-    error.value = null;
-  } catch (e) {
-    error.value = (e as Error).message;
+  } catch {
+    /* ignore */
   }
 }
 
@@ -33,5 +29,5 @@ export function useSnapshot(intervalMs = 2000) {
     }
   };
 
-  return { snapshot, lastUpdate, error, release, refresh: tick };
+  return { snapshot, release, refresh: tick };
 }

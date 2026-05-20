@@ -10,18 +10,6 @@ export type PrinterSnapshot = Record<string, unknown> & {
   print_error?: number;
 };
 
-export interface EventRecord {
-  ts: number;
-  kind: string;
-  title: string;
-  detail: string;
-  file: string | null;
-  layer: number | null;
-  layer_total: number | null;
-  percent: number | null;
-  hms_code: string | null;
-}
-
 export interface DetectorStatus {
   enabled: boolean;
   last_tick_ts: number | null;
@@ -43,27 +31,10 @@ export async function fetchSnapshot(): Promise<PrinterSnapshot> {
   return data.snapshot ?? {};
 }
 
-export async function fetchEvents(limit = 50): Promise<EventRecord[]> {
-  const data = await getJSON<{ events: EventRecord[] }>(`/api/events?limit=${limit}`);
-  return data.events ?? [];
-}
-
 export async function fetchDetector(): Promise<DetectorStatus> {
   return getJSON<DetectorStatus>('/api/detector');
 }
 
 export function frameUrl(): string {
   return `/api/frame.jpg?ts=${Date.now()}`;
-}
-
-export function openEventStream(onMessage: (ev: EventRecord) => void): EventSource {
-  const es = new EventSource('/api/stream');
-  es.onmessage = (e) => {
-    try {
-      onMessage(JSON.parse(e.data) as EventRecord);
-    } catch {
-      /* ignore malformed */
-    }
-  };
-  return es;
 }
