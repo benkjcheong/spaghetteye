@@ -17,6 +17,8 @@ class DetectionError(RuntimeError):
 class DetectionResult:
     failure_detected: bool
     confidence: float
+    score: float
+    box_count: int
     failure_type: str
     summary: str
 
@@ -50,15 +52,21 @@ class LocalFailureDetector:
         outputs = self._session.run(None, {self._input_name: arr})
         detections = self._post_process(outputs, width, height)
         if not detections:
-            return DetectionResult(False, 0.0, "none", "No local failure detections")
+            return DetectionResult(False, 0.0, 0.0, 0, "none", "No local failure detections")
         top = max(detections, key=lambda item: item[1])
         conf = float(top[1])
         boxes = len(detections)
+        score = float(sum(item[1] for item in detections))
         return DetectionResult(
             failure_detected=True,
             confidence=conf,
+            score=score,
+            box_count=boxes,
             failure_type="failure",
-            summary=f"Local model flagged {boxes} failure region(s); top confidence {conf:.2f}",
+            summary=(
+                f"Local model flagged {boxes} failure region(s); "
+                f"frame score {score:.2f}; top confidence {conf:.2f}"
+            ),
         )
 
     def _post_process(self, outputs, width: int, height: int):

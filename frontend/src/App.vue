@@ -10,6 +10,10 @@ type Snapshot = {
 
 type Detector = {
   last_confidence: number | null;
+  last_score?: number | null;
+  normalized_score?: number | null;
+  safe_frames_remaining?: number;
+  monitoring_active?: boolean;
   alerted: boolean;
 };
 
@@ -68,9 +72,23 @@ const eta = computed(() => {
   return h ? `${h}h ${mm}m` : `${mm}m`;
 });
 
-const confidence = computed(() => {
-  const c = detector.value?.last_confidence;
-  return c === null || c === undefined ? '—' : `${(c * 100).toFixed(1)}%`;
+const riskScore = computed(() => {
+  const score = detector.value?.normalized_score;
+  return score === null || score === undefined ? '—' : `${(score * 100).toFixed(1)}%`;
+});
+
+const riskDisplay = computed(() => {
+  const remaining = detector.value?.safe_frames_remaining ?? 0;
+  if (!(detector.value?.monitoring_active)) return 'Idle';
+  if (remaining > 0) return 'Warming up';
+  return riskScore.value;
+});
+
+const riskHint = computed(() => {
+  const remaining = detector.value?.safe_frames_remaining ?? 0;
+  if (!(detector.value?.monitoring_active)) return 'Monitoring starts when the printer is actively running.';
+  if (remaining > 0) return `${remaining} frame${remaining === 1 ? '' : 's'} left before alerts arm.`;
+  return 'Smoothed failure risk based on recent frames.';
 });
 
 const GREEN_CLS = 'text-state-running ring-state-running/40 bg-state-running/10';
@@ -383,8 +401,9 @@ async function confirmStopYes() {
         </div>
 
         <div>
-          <div class="text-xs uppercase tracking-wider text-text-muted">Confidence</div>
-          <div class="mt-2 font-mono text-xl">{{ confidence }}</div>
+          <div class="text-xs uppercase tracking-wider text-text-muted">Risk score</div>
+          <div class="mt-2 font-mono text-xl">{{ riskDisplay }}</div>
+          <div class="mt-2 text-sm text-text-muted">{{ riskHint }}</div>
         </div>
       </div>
     </aside>

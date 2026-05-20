@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 from .events import Event
@@ -19,8 +20,136 @@ class Detector(Protocol):
 
 
 AlertCallback = Callable[[Event, bytes | None], None]
-TickCallback = Callable[[bytes | None, Any, int, bool], None]
+TickCallback = Callable[[bytes | None, Any, Any, bool, bool], None]
 AutoPauseCallback = Callable[[], None]
+
+
+@dataclass(frozen=True)
+class DecisionState:
+    frame_num: int = 0
+    current_score: float = 0.0
+    ewm_mean: float = 0.0
+    rolling_mean_short: float = 0.0
+    rolling_mean_long: float = 0.0
+    adjusted_score: float = 0.0
+    warning_threshold: float = 0.38
+    failure_threshold: float = 0.665
+    normalized_score: float = 0.0
+    safe_frames_remaining: int = 0
+    should_alert: bool = False
+    should_pause: bool = False
+
+
+class ObicoDecisionEngine:
+    _EWM_ALPHA = 2 / (12 + 1)
+    _ROLLING_WIN_SHORT = 310
+    _ROLLING_WIN_LONG = 7200
+
+    def __init__(
+        self,
+        *,
+        sensitivity: float,
+        threshold_low: float,
+        threshold_high: float,
+        init_safe_frames: int,
+        rolling_mean_short_multiple: float,
+        escalating_factor: float,
+    ) -> None:
+        self._sensitivity = sensitivity
+        self._threshold_low = threshold_low
+        self._threshold_high = threshold_high
+        self._init_safe_frames = init_safe_frames
+        self._rolling_mean_short_multiple = rolling_mean_short_multiple
+        self._escalating_factor = escalating_factor
+        self.reset()
+
+    def reset(self) -> DecisionState:
+        self._frame_num = 0
+        self._ewm_mean = 0.0
+        self._rolling_mean_short = 0.0
+        self._rolling_mean_long = 0.0
+        self._last = DecisionState(
+            warning_threshold=self._threshold_low,
+            failure_threshold=self._threshold_low * self._escalating_factor,
+            safe_frames_remaining=self._init_safe_frames,
+        )
+        return self._last
+
+    def current(self) -> DecisionState:
+        return self._last
+
+    def update(self, score: float) -> DecisionState:
+        self._frame_num += 1
+        self._ewm_mean = score * self._EWM_ALPHA + self._ewm_mean * (1 - self._EWM_ALPHA)
+        self._rolling_mean_short = self._next_rolling_mean(
+            score, self._rolling_mean_short, self._frame_num, self._ROLLING_WIN_SHORT,
+        )
+        self._rolling_mean_long = self._next_rolling_mean(
+            score, self._rolling_mean_long, self._frame_num, self._ROLLING_WIN_LONG,
+        )
+
+        adjusted_score = (self._ewm_mean - self._rolling_mean_long) * self._sensitivity
+        warning_threshold = min(
+            self._threshold_high,
+            max(
+                self._threshold_low,
+                (self._rolling_mean_short - self._rolling_mean_long) * self._rolling_mean_short_multiple,
+            ),
+        )
+        failure_threshold = warning_threshold * self._escalating_factor
+
+        self._last = DecisionState(
+            frame_num=self._frame_num,
+            current_score=score,
+            ewm_mean=self._ewm_mean,
+            rolling_mean_short=self._rolling_mean_short,
+            rolling_mean_long=self._rolling_mean_long,
+            adjusted_score=adjusted_score,
+            warning_threshold=warning_threshold,
+            failure_threshold=failure_threshold,
+            normalized_score=self._calc_normalized_score(adjusted_score, warning_threshold, failure_threshold),
+            safe_frames_remaining=max(0, self._init_safe_frames - self._frame_num),
+            should_alert=self._is_failing(1.0),
+            should_pause=self._is_failing(self._escalating_factor),
+        )
+        return self._last
+
+    def _is_failing(self, escalating_factor: float) -> bool:
+        if self._frame_num < self._init_safe_frames:
+            return False
+
+        adjusted = (self._ewm_mean - self._rolling_mean_long) * self._sensitivity / escalating_factor
+        if adjusted < self._threshold_low:
+            return False
+        if adjusted > self._threshold_high:
+            return True
+        return adjusted > (
+            (self._rolling_mean_short - self._rolling_mean_long) * self._rolling_mean_short_multiple
+        )
+
+    @staticmethod
+    def _next_rolling_mean(score: float, current: float, count: int, win_size: int) -> float:
+        denom = float(win_size if win_size <= count else count + 1)
+        return current + (score - current) / denom
+
+    @staticmethod
+    def _scale(value: float, old_min: float, old_max: float, new_min: float, new_max: float) -> float:
+        if old_max == old_min:
+            return new_max if value >= old_max else new_min
+        scaled = (((value - old_min) * (new_max - new_min)) / (old_max - old_min)) + new_min
+        return min(new_max, max(new_min, scaled))
+
+    def _calc_normalized_score(
+        self,
+        adjusted_score: float,
+        warning_threshold: float,
+        failure_threshold: float,
+    ) -> float:
+        if adjusted_score > failure_threshold:
+            return self._scale(adjusted_score, failure_threshold, failure_threshold * 1.5, 2.0 / 3.0, 1.0)
+        if adjusted_score > warning_threshold:
+            return self._scale(adjusted_score, warning_threshold, failure_threshold, 1.0 / 3.0, 2.0 / 3.0)
+        return self._scale(adjusted_score, 0.0, warning_threshold, 0.0, 1.0 / 3.0)
 
 
 class SpaghettiMonitor:
@@ -31,8 +160,12 @@ class SpaghettiMonitor:
         on_alert: AlertCallback,
         *,
         interval_sec: float = 30.0,
-        min_confidence: float = 0.85,
-        consecutive_hits: int = 2,
+        sensitivity: float = 1.0,
+        threshold_low: float = 0.38,
+        threshold_high: float = 0.78,
+        init_safe_frames: int = 30,
+        rolling_mean_short_multiple: float = 3.8,
+        escalating_factor: float = 1.75,
         on_tick: TickCallback | None = None,
         auto_pause: AutoPauseCallback | None = None,
         auto_pause_enabled: bool = False,
@@ -44,14 +177,19 @@ class SpaghettiMonitor:
         self._auto_pause = auto_pause
         self._auto_pause_enabled = auto_pause_enabled
         self._interval_sec = interval_sec
-        self._min_confidence = min_confidence
-        self._consecutive_hits_required = consecutive_hits
+        self._decision_engine = ObicoDecisionEngine(
+            sensitivity=sensitivity,
+            threshold_low=threshold_low,
+            threshold_high=threshold_high,
+            init_safe_frames=init_safe_frames,
+            rolling_mean_short_multiple=rolling_mean_short_multiple,
+            escalating_factor=escalating_factor,
+        )
         self._lock = threading.Lock()
         self._snapshot: dict[str, Any] = {}
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._active = False
-        self._consecutive_hits = 0
         self._alerted = False
         self._auto_paused = False
 
@@ -86,57 +224,55 @@ class SpaghettiMonitor:
         now_active = snapshot.get("gcode_state") == "RUNNING"
         if not now_active:
             self._reset_state(now_active=False)
-            self._emit_tick(frame, None)
+            self._emit_tick(frame, None, False)
             return
 
         if not self._active:
             self._reset_state(now_active=True)
 
         if not frame:
-            self._emit_tick(None, None)
+            self._emit_tick(None, None, True)
             return
 
         try:
             result = self._detector.detect(frame)
         except Exception as exc:
             log.warning("spaghetti detection failed: %s", exc)
-            self._emit_tick(frame, None)
+            self._emit_tick(frame, None, True)
             return
 
-        if not result.failure_detected or result.confidence < self._min_confidence:
-            self._consecutive_hits = 0
-            self._emit_tick(frame, result)
-            return
+        decision = self._decision_engine.update(result.score)
+        self._emit_tick(frame, result, True)
 
-        self._consecutive_hits += 1
-        self._emit_tick(frame, result)
-        if self._alerted or self._consecutive_hits < self._consecutive_hits_required:
-            return
+        if decision.should_alert and not self._alerted:
+            detail = (
+                f"{result.failure_type} (risk {decision.normalized_score:.2f}; "
+                f"frame {decision.current_score:.2f}; top {result.confidence:.2f}) — {result.summary}"
+            )
+            event = Event(
+                kind="spaghetti_detected",
+                title="Possible spaghetti / blob failure detected",
+                detail=detail,
+                file=snapshot.get("subtask_name"),
+                layer=self._maybe_int(snapshot.get("layer_num")),
+                layer_total=self._maybe_int(snapshot.get("total_layer_num")),
+                percent=self._maybe_int(snapshot.get("mc_percent")),
+            )
+            self._on_alert(event, frame)
+            self._alerted = True
 
-        detail = f"{result.failure_type} ({result.confidence:.2f}) — {result.summary}"
-        event = Event(
-            kind="spaghetti_detected",
-            title="Possible spaghetti / blob failure detected",
-            detail=detail,
-            file=snapshot.get("subtask_name"),
-            layer=self._maybe_int(snapshot.get("layer_num")),
-            layer_total=self._maybe_int(snapshot.get("total_layer_num")),
-            percent=self._maybe_int(snapshot.get("mc_percent")),
-        )
-        self._on_alert(event, frame)
-        self._alerted = True
-        if self._auto_pause_enabled and self._auto_pause is not None and not self._auto_paused:
+        if decision.should_pause and self._auto_pause_enabled and self._auto_pause is not None and not self._auto_paused:
             try:
                 self._auto_pause()
                 self._auto_paused = True
             except Exception as exc:
                 log.warning("auto-pause failed: %s", exc)
 
-    def _emit_tick(self, frame: bytes | None, result: Any) -> None:
+    def _emit_tick(self, frame: bytes | None, result: Any, active: bool) -> None:
         if self._on_tick is None:
             return
         try:
-            self._on_tick(frame, result, self._consecutive_hits, self._alerted)
+            self._on_tick(frame, result, self._decision_engine.current(), active, self._alerted)
         except Exception as exc:
             log.debug("on_tick callback failed: %s", exc)
 
@@ -147,9 +283,9 @@ class SpaghettiMonitor:
 
     def _reset_state(self, *, now_active: bool) -> None:
         self._active = now_active
-        self._consecutive_hits = 0
         self._alerted = False
         self._auto_paused = False
+        self._decision_engine.reset()
 
     @staticmethod
     def _maybe_int(value: Any) -> int | None:

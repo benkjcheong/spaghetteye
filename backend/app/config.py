@@ -17,12 +17,16 @@ class Config:
     tg_chat_id: str
     log_level: str = "INFO"
     spaghetti_interval_sec: float = 5.0
-    spaghetti_consecutive_hits: int = 2
-    spaghetti_min_confidence: float = 0.85
     camera_library_path: str | None = None
     spaghetti_model_path: str | None = None
     spaghetti_model_url: str = "https://tsd-pub-static.s3.amazonaws.com/ml-models/model-weights-5a6b1be1fa.onnx"
     spaghetti_detection_threshold: float = 0.08
+    spaghetti_sensitivity: float = 1.0
+    spaghetti_threshold_low: float = 0.38
+    spaghetti_threshold_high: float = 0.78
+    spaghetti_init_safe_frames: int = 30
+    spaghetti_rolling_mean_short_multiple: float = 3.8
+    spaghetti_escalating_factor: float = 1.75
     auto_pause_on_spaghetti: bool = False
 
 
@@ -66,8 +70,6 @@ def load_config(env_file: str | Path | None = None) -> Config:
         tg_chat_id=_require("TG_CHAT_ID"),
         log_level=os.environ.get("LOG_LEVEL", "INFO").upper(),
         spaghetti_interval_sec=_get_float("SPAGHETTI_INTERVAL_SEC", 5.0),
-        spaghetti_consecutive_hits=_get_int("SPAGHETTI_CONSECUTIVE_HITS", 2),
-        spaghetti_min_confidence=_get_float("SPAGHETTI_MIN_CONFIDENCE", 0.85),
         camera_library_path=os.environ.get("CAMERA_LIBRARY_PATH", "").strip() or None,
         spaghetti_model_path=os.environ.get("SPAGHETTI_MODEL_PATH", "").strip() or None,
         spaghetti_model_url=(
@@ -75,6 +77,12 @@ def load_config(env_file: str | Path | None = None) -> Config:
             or "https://tsd-pub-static.s3.amazonaws.com/ml-models/model-weights-5a6b1be1fa.onnx"
         ),
         spaghetti_detection_threshold=_get_float("SPAGHETTI_DETECTION_THRESHOLD", 0.08),
+        spaghetti_sensitivity=_get_float("SPAGHETTI_SENSITIVITY", 1.0),
+        spaghetti_threshold_low=_get_float("SPAGHETTI_THRESHOLD_LOW", 0.38),
+        spaghetti_threshold_high=_get_float("SPAGHETTI_THRESHOLD_HIGH", 0.78),
+        spaghetti_init_safe_frames=_get_int("SPAGHETTI_INIT_SAFE_FRAMES", 30),
+        spaghetti_rolling_mean_short_multiple=_get_float("SPAGHETTI_ROLLING_MEAN_SHORT_MULTIPLE", 3.8),
+        spaghetti_escalating_factor=_get_float("SPAGHETTI_ESCALATING_FACTOR", 1.75),
         auto_pause_on_spaghetti=_get_bool("AUTO_PAUSE_ON_SPAGHETTI", False),
     )
 

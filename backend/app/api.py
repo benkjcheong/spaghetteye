@@ -57,9 +57,18 @@ class AppState:
         self._detector: dict[str, Any] = {
             "last_tick_ts": None,
             "last_confidence": None,
+            "last_score": None,
+            "last_box_count": 0,
             "last_summary": None,
             "failure_detected": None,
-            "consecutive_hits": 0,
+            "monitoring_active": False,
+            "decision_policy": "obico_like",
+            "frame_num": 0,
+            "normalized_score": 0.0,
+            "adjusted_score": 0.0,
+            "warning_threshold": 0.38,
+            "failure_threshold": 0.665,
+            "safe_frames_remaining": 0,
             "alerted": False,
         }
         self._control: PrinterControl | None = None
@@ -128,15 +137,29 @@ class AppState:
         with self._lock:
             return self._frame_bytes, self._frame_ts
 
-    def update_detection(self, result: DetectionResult | None, consecutive_hits: int, alerted: bool) -> None:
+    def update_detection(self, result: DetectionResult | None, decision: Any, active: bool, alerted: bool) -> None:
         with self._lock:
             self._detector["last_tick_ts"] = time.time()
-            self._detector["consecutive_hits"] = consecutive_hits
+            self._detector["monitoring_active"] = active
             self._detector["alerted"] = alerted
+            self._detector["frame_num"] = getattr(decision, "frame_num", 0)
+            self._detector["normalized_score"] = getattr(decision, "normalized_score", 0.0)
+            self._detector["adjusted_score"] = getattr(decision, "adjusted_score", 0.0)
+            self._detector["warning_threshold"] = getattr(decision, "warning_threshold", 0.38)
+            self._detector["failure_threshold"] = getattr(decision, "failure_threshold", 0.665)
+            self._detector["safe_frames_remaining"] = getattr(decision, "safe_frames_remaining", 0)
             if result is not None:
                 self._detector["last_confidence"] = result.confidence
+                self._detector["last_score"] = result.score
+                self._detector["last_box_count"] = result.box_count
                 self._detector["last_summary"] = result.summary
                 self._detector["failure_detected"] = result.failure_detected
+            else:
+                self._detector["last_confidence"] = None
+                self._detector["last_score"] = None
+                self._detector["last_box_count"] = 0
+                self._detector["last_summary"] = None
+                self._detector["failure_detected"] = None
             det_copy = dict(self._detector)
         self._broadcast({"type": "detector", "ts": time.time(), "data": det_copy})
 

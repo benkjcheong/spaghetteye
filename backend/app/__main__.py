@@ -119,17 +119,21 @@ def _build_spaghetti_monitor(
         log.warning("AI monitoring disabled: %s", exc)
         return None
 
-    def on_tick(frame, result, consecutive_hits, alerted):
+    def on_tick(frame, result, decision, active, alerted):
         app_state.set_frame(frame)
-        app_state.update_detection(result, consecutive_hits, alerted)
+        app_state.update_detection(result, decision, active, alerted)
 
     return SpaghettiMonitor(
         camera,
         detector,
         lambda event, image: _deliver_monitor_event(notifier, event, image, app_state),
         interval_sec=cfg.spaghetti_interval_sec,
-        min_confidence=cfg.spaghetti_min_confidence,
-        consecutive_hits=cfg.spaghetti_consecutive_hits,
+        sensitivity=cfg.spaghetti_sensitivity,
+        threshold_low=cfg.spaghetti_threshold_low,
+        threshold_high=cfg.spaghetti_threshold_high,
+        init_safe_frames=cfg.spaghetti_init_safe_frames,
+        rolling_mean_short_multiple=cfg.spaghetti_rolling_mean_short_multiple,
+        escalating_factor=cfg.spaghetti_escalating_factor,
         on_tick=on_tick,
         auto_pause=auto_pause,
         auto_pause_enabled=cfg.auto_pause_on_spaghetti,
