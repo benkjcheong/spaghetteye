@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spaghettimonster"
+version = "0.1.0"
+description = "Self-hosted Bambu A1 print monitor"
+requires-python = ">=3.10"
+dependencies = [
+  "paho-mqtt>=2.0,<3",
+  "python-dotenv>=1.0",
+  "requests>=2.32",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

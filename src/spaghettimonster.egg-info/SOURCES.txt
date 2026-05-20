@@ -1,0 +1,17 @@
+README.md
+pyproject.toml
+src/spaghettimonster/__init__.py
+src/spaghettimonster/__main__.py
+src/spaghettimonster/config.py
+src/spaghettimonster/events.py
+src/spaghettimonster/hms.py
+src/spaghettimonster/main.py
+src/spaghettimonster/mqtt_client.py
+src/spaghettimonster/state.py
+src/spaghettimonster/telegram.py
+src/spaghettimonster.egg-info/PKG-INFO
+src/spaghettimonster.egg-info/SOURCES.txt
+src/spaghettimonster.egg-info/dependency_links.txt
+src/spaghettimonster.egg-info/requires.txt
+src/spaghettimonster.egg-info/top_level.txt
+tests/test_state.py
