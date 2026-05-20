@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import socket
 import ssl
 import uuid
 from collections.abc import Callable
@@ -14,6 +15,28 @@ log = logging.getLogger(__name__)
 MessageHandler = Callable[[dict[str, Any]], None]
 
 
+def _create_socket_connection(client: mqtt.Client):
+    proxy = client._get_proxy()
+    addr = (client._host, client._port)
+    kwargs = {"timeout": client._connect_timeout}
+
+    # Paho stores the default bind config as ("", 0). Passing that through to
+    # socket.create_connection() forces a local bind that can fail on macOS
+    # before the outbound connect is even attempted. Only pass source_address
+    # when the caller explicitly requested one.
+    if client._bind_address or client._bind_port:
+        kwargs["source_address"] = (client._bind_address, client._bind_port)
+
+    if proxy:
+        return mqtt.socks.create_connection(addr, **kwargs, **proxy)
+    return socket.create_connection(addr, **kwargs)
+
+
+class _PatchedClient(mqtt.Client):
+    def _create_socket_connection(self):
+        return _create_socket_connection(self)
+
+
 def build_client(
     printer_ip: str,
     printer_serial: str,
@@ -21,7 +44,7 @@ def build_client(
     on_payload: MessageHandler,
 ) -> mqtt.Client:
     client_id = f"spaghettimonster-{uuid.uuid4().hex[:8]}"
-    client = mqtt.Client(
+    client = _PatchedClient(
         callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
         client_id=client_id,
         protocol=mqtt.MQTTv311,
@@ -66,5 +89,5 @@ def build_client(
     client.on_message = on_message
 
     log.info("connecting to %s:8883 as bblp", printer_ip)
-    client.connect(printer_ip, 8883, keepalive=60)
+    client.connect_async(printer_ip, 8883, keepalive=60)
     return client
