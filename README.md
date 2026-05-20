@@ -24,3 +24,16 @@ SPAGHETTI_DETECTION_THRESHOLD=0.08
 # SPAGHETTI_MODEL_PATH=/path/to/local/model.onnx
 # SPAGHETTI_MODEL_URL=https://...
 ```
+
+Quick one-shot test:
+
+```bash
+python -m spaghettimonster.detect_once --save /tmp/a1-frame.jpg
+```
+
+That will:
+
+- capture one JPEG frame from the A1 local camera stream
+- run the local failure model once
+- print a JSON result
+- save the captured frame if you pass `--save`

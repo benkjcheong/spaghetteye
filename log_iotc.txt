@@ -1,0 +1,15 @@
+[26-05-20 14:21:06.539746][D][16EA37000][IOTC] [IOTC_Check_Session_Status] Error: Not Initialized!
+[26-05-20 14:21:06.540520][D][16EA37000][IOTC] @@@@@ IOTC_DeInitialize called
+[26-05-20 14:21:06.540545][D][16EA37000][IOTC] @ErrCode -12 - Line (13010)
+[26-05-20 14:22:12.165725][D][1F67C58C0][IOTC] [IOTC_Check_Session_Status] Error: Not Initialized!
+[26-05-20 14:22:12.166685][D][1F67C58C0][IOTC] @@@@@ IOTC_DeInitialize called
+[26-05-20 14:22:12.166742][D][1F67C58C0][IOTC] @ErrCode -12 - Line (13010)
+[26-05-20 14:27:08.853185][D][1F67C58C0][IOTC] [IOTC_Check_Session_Status] Error: Not Initialized!
+[26-05-20 14:27:08.853929][D][1F67C58C0][IOTC] @@@@@ IOTC_DeInitialize called
+[26-05-20 14:27:08.853961][D][1F67C58C0][IOTC] @ErrCode -12 - Line (13010)
+[26-05-20 14:27:36.681394][D][1F67C58C0][IOTC] [IOTC_Check_Session_Status] Error: Not Initialized!
+[26-05-20 14:27:36.682175][D][1F67C58C0][IOTC] @@@@@ IOTC_DeInitialize called
+[26-05-20 14:27:36.682206][D][1F67C58C0][IOTC] @ErrCode -12 - Line (13010)
+[26-05-20 14:28:28.917027][D][1F67C58C0][IOTC] [IOTC_Check_Session_Status] Error: Not Initialized!
+[26-05-20 14:28:28.918389][D][1F67C58C0][IOTC] @@@@@ IOTC_DeInitialize called
+[26-05-20 14:28:28.918413][D][1F67C58C0][IOTC] @ErrCode -12 - Line (13010)
