@@ -24,17 +24,7 @@ class Config:
     spaghetti_sensitivity: float = 1.0
     spaghetti_threshold_low: float = 0.38
     spaghetti_threshold_high: float = 0.78
-    spaghetti_init_safe_frames: int = 30
     spaghetti_rolling_mean_short_multiple: float = 3.8
-    spaghetti_escalating_factor: float = 1.75
-    auto_pause_on_spaghetti: bool = False
-
-
-def _get_int(key: str, default: int) -> int:
-    val = os.environ.get(key)
-    if val is None or not val.strip():
-        return default
-    return int(val)
 
 
 def _get_float(key: str, default: float) -> float:
@@ -42,13 +32,6 @@ def _get_float(key: str, default: float) -> float:
     if val is None or not val.strip():
         return default
     return float(val)
-
-
-def _get_bool(key: str, default: bool) -> bool:
-    val = os.environ.get(key)
-    if val is None or not val.strip():
-        return default
-    return val.strip().lower() in ("1", "true", "yes", "on")
 
 
 def _require(key: str) -> str:
@@ -80,10 +63,7 @@ def load_config(env_file: str | Path | None = None) -> Config:
         spaghetti_sensitivity=_get_float("SPAGHETTI_SENSITIVITY", 1.0),
         spaghetti_threshold_low=_get_float("SPAGHETTI_THRESHOLD_LOW", 0.38),
         spaghetti_threshold_high=_get_float("SPAGHETTI_THRESHOLD_HIGH", 0.78),
-        spaghetti_init_safe_frames=_get_int("SPAGHETTI_INIT_SAFE_FRAMES", 30),
         spaghetti_rolling_mean_short_multiple=_get_float("SPAGHETTI_ROLLING_MEAN_SHORT_MULTIPLE", 3.8),
-        spaghetti_escalating_factor=_get_float("SPAGHETTI_ESCALATING_FACTOR", 1.75),
-        auto_pause_on_spaghetti=_get_bool("AUTO_PAUSE_ON_SPAGHETTI", False),
     )
 
 

@@ -131,12 +131,9 @@ def _build_spaghetti_monitor(
         sensitivity=cfg.spaghetti_sensitivity,
         threshold_low=cfg.spaghetti_threshold_low,
         threshold_high=cfg.spaghetti_threshold_high,
-        init_safe_frames=cfg.spaghetti_init_safe_frames,
         rolling_mean_short_multiple=cfg.spaghetti_rolling_mean_short_multiple,
-        escalating_factor=cfg.spaghetti_escalating_factor,
         on_tick=on_tick,
         auto_pause=auto_pause,
-        auto_pause_enabled=cfg.auto_pause_on_spaghetti,
     )
 
 

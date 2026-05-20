@@ -44,6 +44,7 @@ class ObicoDecisionEngine:
     _EWM_ALPHA = 2 / (12 + 1)
     _ROLLING_WIN_SHORT = 310
     _ROLLING_WIN_LONG = 7200
+    _ESCALATING_FACTOR = 1.0
 
     def __init__(
         self,
@@ -51,16 +52,12 @@ class ObicoDecisionEngine:
         sensitivity: float,
         threshold_low: float,
         threshold_high: float,
-        init_safe_frames: int,
         rolling_mean_short_multiple: float,
-        escalating_factor: float,
     ) -> None:
         self._sensitivity = sensitivity
         self._threshold_low = threshold_low
         self._threshold_high = threshold_high
-        self._init_safe_frames = init_safe_frames
         self._rolling_mean_short_multiple = rolling_mean_short_multiple
-        self._escalating_factor = escalating_factor
         self.reset()
 
     def reset(self) -> DecisionState:
@@ -70,8 +67,7 @@ class ObicoDecisionEngine:
         self._rolling_mean_long = 0.0
         self._last = DecisionState(
             warning_threshold=self._threshold_low,
-            failure_threshold=self._threshold_low * self._escalating_factor,
-            safe_frames_remaining=self._init_safe_frames,
+            failure_threshold=self._threshold_low * self._ESCALATING_FACTOR,
         )
         return self._last
 
@@ -96,7 +92,7 @@ class ObicoDecisionEngine:
                 (self._rolling_mean_short - self._rolling_mean_long) * self._rolling_mean_short_multiple,
             ),
         )
-        failure_threshold = warning_threshold * self._escalating_factor
+        failure_threshold = warning_threshold * self._ESCALATING_FACTOR
 
         self._last = DecisionState(
             frame_num=self._frame_num,
@@ -108,16 +104,12 @@ class ObicoDecisionEngine:
             warning_threshold=warning_threshold,
             failure_threshold=failure_threshold,
             normalized_score=self._calc_normalized_score(adjusted_score, warning_threshold, failure_threshold),
-            safe_frames_remaining=max(0, self._init_safe_frames - self._frame_num),
             should_alert=self._is_failing(1.0),
-            should_pause=self._is_failing(self._escalating_factor),
+            should_pause=self._is_failing(self._ESCALATING_FACTOR),
         )
         return self._last
 
     def _is_failing(self, escalating_factor: float) -> bool:
-        if self._frame_num < self._init_safe_frames:
-            return False
-
         adjusted = (self._ewm_mean - self._rolling_mean_long) * self._sensitivity / escalating_factor
         if adjusted < self._threshold_low:
             return False
@@ -163,27 +155,21 @@ class SpaghettiMonitor:
         sensitivity: float = 1.0,
         threshold_low: float = 0.38,
         threshold_high: float = 0.78,
-        init_safe_frames: int = 30,
         rolling_mean_short_multiple: float = 3.8,
-        escalating_factor: float = 1.75,
         on_tick: TickCallback | None = None,
         auto_pause: AutoPauseCallback | None = None,
-        auto_pause_enabled: bool = False,
     ) -> None:
         self._camera = camera
         self._detector = detector
         self._on_alert = on_alert
         self._on_tick = on_tick
         self._auto_pause = auto_pause
-        self._auto_pause_enabled = auto_pause_enabled
         self._interval_sec = interval_sec
         self._decision_engine = ObicoDecisionEngine(
             sensitivity=sensitivity,
             threshold_low=threshold_low,
             threshold_high=threshold_high,
-            init_safe_frames=init_safe_frames,
             rolling_mean_short_multiple=rolling_mean_short_multiple,
-            escalating_factor=escalating_factor,
         )
         self._lock = threading.Lock()
         self._snapshot: dict[str, Any] = {}
@@ -261,7 +247,7 @@ class SpaghettiMonitor:
             self._on_alert(event, frame)
             self._alerted = True
 
-        if decision.should_pause and self._auto_pause_enabled and self._auto_pause is not None and not self._auto_paused:
+        if decision.should_pause and self._auto_pause is not None and not self._auto_paused:
             try:
                 self._auto_pause()
                 self._auto_paused = True
